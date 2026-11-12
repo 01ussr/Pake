@@ -1765,23 +1765,113 @@ function getFilenameFromUrl(url) {
 
 
 // ===== VK w/o audioadvertising =====
-"use strict";
+(() => {
+    "use strict"
 
-function getVK(){
-    if (!!window.vk){
-        window.vk.audioAdsConfig = null;
-        console.log("User Script: Отключаем аудиорекламу в ВК. Выполнено!");
+    class VkPeProperties {
+        static #KEYS=[
+            "send_user_info_stats", "force_send_user_info", "send_user_info_on_localhost",
+            "send_navigation_stats_in_spa", "log_send_user_info_errors", "web_mytracker_collect_post_stats",
+            "web_stats_device_id", "web_stats_reduce_debounce", "web_stats_send_beacon",
+            "web_stats_send_on_events_limit", "web_stats_transport_story_view", "sentry_js_web_request_timeouts_feature",
+            "sentry_js_web_request_timeouts_forwarding", "sentry_js_web_timeouts_forwarding", "sentry_js_web_verbose",
+            "sentry_log_network_errors", "ads_app_form_link_redirect", "ads_autopromotion_web_geo",
+            "ads_easy_promote_goods_new_create_api", "ads_light_methods_protection", "ads_market_autopromotion_bookmarks_stats",
+            "ads_use_vk_community_video_portrait_4_5", "clips_web_my_tracker", "feed_post_track_code_client_web",
+            "games_send_track_visitor_activity", "js_errors_no_write_uncaught_errors", "tgb_adblock_protection",
+            "post_adblock_protection_promo", "eager_error_monitoring", "mini_apps_performance_close_app_empty_event",
+            "mini_apps_performance_iframe_errors", "mini_apps_performance_web", "mini_apps_send_my_tracker_activity",
+            "post_click_analytics_int_ext_link_click_web", "posting_track_event_count", "unique_adblock_users",
+            "audio_my_tracker_web", "mini_apps_send_stat_arguments_bridge_events_sdk", "ajax_request_parse_html_error",
+            "js_errors_no_write_uncaught_errors", "tns_track_sections", "tns_track_hosts", "geminus_counter",
+            "ads_pixels_track_new_events_web_mvk", "web_navigation_handlers", "measure_module_navigation_stats",
+            "group_join_track_event_count", "feed_content_events_open_post_event_web", "feed_posts_duration_stats_fix",
+            "collect_unsupported_user_info_stats", "log_fetch_requests", "log_fetch_requests_get",
+            "post_adguard_protection_promo", "extended_ajax_logging", "messenger_mediascope_stats_collect",
+            "audio_player_stats_web"
+        ];
 
-    } else {
-        //console.log("User Script: Отключаем аудиорекламу в ВК. Ждём инициализацию объекта");
-        window.setTimeout(getVK, 100);
+        static isValidProperty(key) { return key in this.#KEYS }
     }
-}
 
-(function() {
-    window.addEventListener('load', function() {
-        console.log("User Script: Отключаем аудиорекламу в ВК. Начинаем работу")
-        window.setTimeout(getVK, 100);
+    // Хук для vk
+    let actualVk = window.vk;
+    const vkHooks = new Set();
+    Object.defineProperty(window, "vk", {
+        get: () => actualVk,
+        set: (value) => {
+            actualVk = value;
+            if (actualVk) vkHooks.forEach(hook => hook(actualVk));
+            return true;
+        },
+        configurable: true
     });
+
+    // Хук для свойств vk
+    const createAndPerformVkPropHook = (key, hookfn) => {
+        vkHooks.add(vk => {
+            if (vk && vk[key]) hookfn(vk[key]);
+            let actualProp = vk[key];
+            Object.defineProperty(vk, key, {
+                get: () => actualProp,
+                set: (value) => {
+                    actualProp = value;
+                    hookfn(actualProp);
+                    return true;
+                },
+                configurable: true,
+                enumerable: true
+            });
+        });
+    };
+
+    // Очистка трекеров
+    createAndPerformVkPropHook("pe", pe => {
+        console.log("patch pe");
+        Object.keys(pe)
+            .filter(key => VkPeProperties.isValidProperty(key))
+            .forEach(key => delete window.vk.pe[key]);
+    });
+
+    // --- ГЛАВНЫЙ БЛОК ДЛЯ АУДИОРЕКЛАМЫ ---
+    createAndPerformVkPropHook("audioAdsConfig", audioAdsConfig => {
+        console.log("patch audioAdsConfig");
+        Object.defineProperties(audioAdsConfig, {
+            enabled: { value: false },
+            day_limit_reached: { value: false },
+            sections: { value: [] }
+        });
+    });
+
+    // Отключение сбора ошибок (чтобы не спамило)
+    createAndPerformVkPropHook("cfg", cfg => {
+        console.log("disable error monitoring DSN");
+        if (cfg.error_monitoring_config) {
+            Object.defineProperty(cfg.error_monitoring_config, "dsn", { value: "http://127.0.0.1" });
+        }
+    });
+
+    // Патч рекламы в ленте/слева
+    createAndPerformVkPropHook("adParams", adParams => {
+        console.log("patch adParams");
+        Object.defineProperties(adParams, {
+            ads_can_show: { value: 0 },
+            leftads: { value: "" },
+            wsTransport: { value: "http://127.0.0.1" },
+            ads_rotate_interval: { value: Number.MAX_SAFE_INTEGER }
+        });
+    });
+
+    // Запуск хуков
+    if (window.vk) window.vk = window.vk;
+
+    // Удаление левого баннера (безопасно, так как это отдельный блок)
+    setTimeout(() => {
+        const adsLeft = document.getElementById("ads_left");
+        if (adsLeft) {
+            adsLeft.remove();
+        }
+    }, 2000);
+
 })();
 
