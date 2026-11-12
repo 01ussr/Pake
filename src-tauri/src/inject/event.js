@@ -1764,7 +1764,7 @@ function getFilenameFromUrl(url) {
 }
 
 
-// ===== VK w/o audioadvertising =====
+// ===== VK w/o advertising =====
 (() => {
     "use strict"
 
@@ -1872,6 +1872,43 @@ function getFilenameFromUrl(url) {
             adsLeft.remove();
         }
     }, 2000);
+//additioanl block insertion
+      // ===== ПРИЦЕЛЬНЫЙ ОГОНЬ ПО АУДИОРЕКЛАМЕ =====
+    // Пытаемся перебить всё, что может отвечать за аудиорекламу
+    
+    // 1. Старый добрый метод через window
+    setInterval(() => {
+        if (window.audioAdsConfig !== false) {
+            try {
+                Object.defineProperty(window, "audioAdsConfig", {
+                    value: false,
+                    configurable: true
+                });
+            } catch (e) {}
+        }
+    }, 1000);
 
+    // 2. Проверяем другие возможные имена переменных в window
+    setInterval(() => {
+        const varsToKill = ['audio_ads', 'audioAds', 'audio_ads_config', 'adv_audio', 'noAudioAds'];
+        varsToKill.forEach(v => {
+            if (window[v] !== false) {
+                try {
+                    Object.defineProperty(window, v, { value: false, configurable: true });
+                } catch (e) {}
+            }
+        });
+    }, 1500);
+
+    // 3. На всякий случай переопределяем функцию включения рекламы в плеере (если она есть)
+    setInterval(() => {
+        if (window.vk && window.vk.audio && window.vk.audio.playAudioAd) {
+            window.vk.audio.playAudioAd = function() {
+                console.log("Аудиореклама заблокирована!");
+                return false;
+            };
+        }
+    }, 2000);
+    // ============================================
 })();
 
